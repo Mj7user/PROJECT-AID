@@ -1,79 +1,157 @@
-package com.civicaid.config;
+package com.civicaid.service.impl;
 
+import com.civicaid.dto.request.AuthRequest;
+import com.civicaid.dto.response.AuthResponse;
+import com.civicaid.dto.response.UserResponse;
 import com.civicaid.entity.User;
+import com.civicaid.exception.BusinessException;
+import com.civicaid.exception.DuplicateResourceException;
+import com.civicaid.exception.ResourceNotFoundException;
 import com.civicaid.repository.UserRepository;
+import com.civicaid.security.jwt.JwtTokenProvider;
+import com.civicaid.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
-/**
- * Runs once on every application startup.
- *
- * Seeds a default set of staff accounts if they do not already exist in the
- * database (checked by email). This ensures there is always at least one
- * ADMINISTRATOR available to log in and create further accounts via
- * POST /users.
- *
- * ⚠️  IMPORTANT: Change all default passwords immediately after first login
- *     in any non-development environment.
- */
-@Component
+@Service
 @RequiredArgsConstructor
 @Slf4j
-public class DataInitializer implements ApplicationRunner {
+public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-
-    // ---------------------------------------------------------------------------
-    // Seed definitions — adjust names / emails / passwords before deploying.
-    // ---------------------------------------------------------------------------
-    private static final List<SeedUser> SEED_USERS = List.of(
-        new SeedUser("System Administrator",  "admin@civicaid.gov",            "Admin@1234",    User.Role.ADMINISTRATOR),
-        new SeedUser("Welfare Officer",        "officer@civicaid.gov",          "Officer@1234",  User.Role.WELFARE_OFFICER),
-        new SeedUser("Program Manager",        "manager@civicaid.gov",          "Manager@1234",  User.Role.PROGRAM_MANAGER),
-        new SeedUser("Compliance Officer",     "compliance@civicaid.gov",       "Comply@1234",   User.Role.COMPLIANCE_OFFICER),
-        new SeedUser("Government Auditor",     "auditor@civicaid.gov",          "Audit@1234",    User.Role.GOVERNMENT_AUDITOR)
-    );
+    private final JwtTokenProvider jwtTokenProvider;
+    private final AuthenticationManager authenticationManager;
 
     @Override
     @Transactional
-    public void run(ApplicationArguments args) {
-        log.info("DataInitializer: checking seed accounts...");
-        int created = 0;
+    public AuthResponse login(AuthRequest.Login request) {
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+        );
 
-        for (SeedUser seed : SEED_USERS) {
-            if (userRepository.existsByEmail(seed.email())) {
-                log.debug("DataInitializer: '{}' already exists, skipping.", seed.email());
-                continue;
-            }
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-            User user = User.builder()
-                    .name(seed.name())
-                    .email(seed.email())
-                    .password(passwordEncoder.encode(seed.rawPassword()))
-                    .role(seed.role())
-                    .status(User.UserStatus.ACTIVE)
-                    .build();
+        String accessToken = jwtTokenProvider.generateAccessToken(request.getEmail());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(request.getEmail());
 
-            userRepository.save(user);
-            log.info("DataInitializer: seeded {} → {} [{}]", seed.role(), seed.name(), seed.email());
-            created++;
-        }
+        log.info("User logged in: {}", request.getEmail());
 
-        if (created == 0) {
-            log.info("DataInitializer: all seed accounts already present, nothing to do.");
-        } else {
-            log.info("DataInitializer: {} account(s) seeded. Change default passwords before going to production!", created);
-        }
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .expiresIn(jwtTokenProvider.getExpirationMs())
+                .user(mapToUserResponse(user))
+                .build();
     }
 
-    // Simple record to hold seed definition data.
-    private record SeedUser(String name, String email, String rawPassword, User.Role role) {}
+    @Override
+    @Transactional
+    public AuthResponse register(AuthRequest.Register request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new DuplicateResourceException("Email already registered: " + request.getEmail());
+        }
+
+        // Self-registration is restricted to CITIZEN only.
+        // All privileged roles (WELFARE_OFFICER, PROGRAM_MANAGER, etc.) must be
+        // created by an ADMINISTRATOR via POST /users.
+        User.Role role;
+        try {
+            role = User.Role.valueOf(request.getRole().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("Invalid role: " + request.getRole());
+        }
+        if (role != User.Role.CITIZEN) {
+            throw new BusinessException(
+                "Self-registration is only allowed for the CITIZEN role. " +
+                "Privileged accounts must be created by an Administrator.");
+        }
+
+        User user = User.builder()
+                .name(request.getName())
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .phone(request.getPhone())
+                .role(role)
+                .status(User.UserStatus.ACTIVE)
+                .build();
+
+        user = userRepository.save(user);
+        log.info("New user registered: {}", request.getEmail());
+
+        String accessToken = jwtTokenProvider.generateAccessToken(user.getEmail());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getEmail());
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .expiresIn(jwtTokenProvider.getExpirationMs())
+                .user(mapToUserResponse(user))
+                .build();
+    }
+
+    @Override
+    public AuthResponse refreshToken(AuthRequest.RefreshToken request) {
+        String token = request.getRefreshToken();
+        if (!jwtTokenProvider.validateToken(token)) {
+            throw new BusinessException("Invalid or expired refresh token");
+        }
+        String email = jwtTokenProvider.extractUsername(token);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        String newAccessToken = jwtTokenProvider.generateAccessToken(email);
+        String newRefreshToken = jwtTokenProvider.generateRefreshToken(email);
+
+        return AuthResponse.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .tokenType("Bearer")
+                .expiresIn(jwtTokenProvider.getExpirationMs())
+                .user(mapToUserResponse(user))
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(Long userId, AuthRequest.ChangePassword request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new BusinessException("Current password is incorrect");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        log.info("Password changed for user: {}", user.getEmail());
+    }
+
+    @Override
+    public void logout(String token) {
+        // Stateless JWT — client discards token; add token blacklist here if needed
+        log.info("User logged out");
+    }
+
+    private UserResponse mapToUserResponse(User user) {
+        return UserResponse.builder()
+                .userId(user.getUserId())
+                .name(user.getName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .role(user.getRole())
+                .status(user.getStatus())
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
+    }
 }
