@@ -1,157 +1,78 @@
-package com.civicaid.service.impl;
+package com.civicaid.controller;
 
-import com.civicaid.dto.request.AuthRequest;
-import com.civicaid.dto.response.AuthResponse;
+import com.civicaid.dto.request.UserRequest;
+import com.civicaid.dto.response.ApiResponse;
 import com.civicaid.dto.response.UserResponse;
 import com.civicaid.entity.User;
-import com.civicaid.exception.BusinessException;
-import com.civicaid.exception.DuplicateResourceException;
-import com.civicaid.exception.ResourceNotFoundException;
-import com.civicaid.repository.UserRepository;
-import com.civicaid.security.jwt.JwtTokenProvider;
-import com.civicaid.service.AuthService;
+import com.civicaid.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
-@Service
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+@RestController
+@RequestMapping("/users")
 @RequiredArgsConstructor
-@Slf4j
-public class AuthServiceImpl implements AuthService {
+@PreAuthorize("hasRole('ADMINISTRATOR')")
+public class UserController {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final AuthenticationManager authenticationManager;
+    private final UserService userService;
 
-    @Override
-    @Transactional
-    public AuthResponse login(AuthRequest.Login request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
-
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        String accessToken = jwtTokenProvider.generateAccessToken(request.getEmail());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(request.getEmail());
-
-        log.info("User logged in: {}", request.getEmail());
-
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtTokenProvider.getExpirationMs())
-                .user(mapToUserResponse(user))
-                .build();
+    @PostMapping
+    public ResponseEntity<ApiResponse<UserResponse>> createUser(
+            @Valid @RequestBody UserRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(userService.createUser(request), "User created successfully"));
     }
 
-    @Override
-    @Transactional
-    public AuthResponse register(AuthRequest.Register request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new DuplicateResourceException("Email already registered: " + request.getEmail());
-        }
-
-        // Self-registration is restricted to CITIZEN only.
-        // All privileged roles (WELFARE_OFFICER, PROGRAM_MANAGER, etc.) must be
-        // created by an ADMINISTRATOR via POST /users.
-        User.Role role;
-        try {
-            role = User.Role.valueOf(request.getRole().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException("Invalid role: " + request.getRole());
-        }
-        if (role != User.Role.CITIZEN) {
-            throw new BusinessException(
-                "Self-registration is only allowed for the CITIZEN role. " +
-                "Privileged accounts must be created by an Administrator.");
-        }
-
-        User user = User.builder()
-                .name(request.getName())
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .phone(request.getPhone())
-                .role(role)
-                .status(User.UserStatus.ACTIVE)
-                .build();
-
-        user = userRepository.save(user);
-        log.info("New user registered: {}", request.getEmail());
-
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getEmail());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getEmail());
-
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtTokenProvider.getExpirationMs())
-                .user(mapToUserResponse(user))
-                .build();
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<UserResponse>>> getAllUsers(
+            @PageableDefault(size = 20, sort = "userId") Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getAllUsers(pageable)));
     }
 
-    @Override
-    public AuthResponse refreshToken(AuthRequest.RefreshToken request) {
-        String token = request.getRefreshToken();
-        if (!jwtTokenProvider.validateToken(token)) {
-            throw new BusinessException("Invalid or expired refresh token");
-        }
-        String email = jwtTokenProvider.extractUsername(token);
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        String newAccessToken = jwtTokenProvider.generateAccessToken(email);
-        String newRefreshToken = jwtTokenProvider.generateRefreshToken(email);
-
-        return AuthResponse.builder()
-                .accessToken(newAccessToken)
-                .refreshToken(newRefreshToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtTokenProvider.getExpirationMs())
-                .user(mapToUserResponse(user))
-                .build();
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<UserResponse>> getUserById(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getUserById(id)));
     }
 
-    @Override
-    @Transactional
-    public void changePassword(Long userId, AuthRequest.ChangePassword request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
-
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new BusinessException("Current password is incorrect");
-        }
-
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
-        userRepository.save(user);
-        log.info("Password changed for user: {}", user.getEmail());
+    @GetMapping("/email/{email}")
+    public ResponseEntity<ApiResponse<UserResponse>> getUserByEmail(@PathVariable String email) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getUserByEmail(email)));
     }
 
-    @Override
-    public void logout(String token) {
-        // Stateless JWT — client discards token; add token blacklist here if needed
-        log.info("User logged out");
+    @GetMapping("/role/{role}")
+    public ResponseEntity<ApiResponse<Page<UserResponse>>> getUsersByRole(
+            @PathVariable User.Role role,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(userService.getUsersByRole(role, pageable)));
     }
 
-    private UserResponse mapToUserResponse(User user) {
-        return UserResponse.builder()
-                .userId(user.getUserId())
-                .name(user.getName())
-                .email(user.getEmail())
-                .phone(user.getPhone())
-                .role(user.getRole())
-                .status(user.getStatus())
-                .createdAt(user.getCreatedAt())
-                .updatedAt(user.getUpdatedAt())
-                .build();
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<UserResponse>> updateUser(
+            @PathVariable Long id,
+            @Valid @RequestBody UserRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(userService.updateUser(id, request), "User updated successfully"));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<ApiResponse<Void>> updateUserStatus(
+            @PathVariable Long id,
+            @RequestParam User.UserStatus status) {
+        userService.updateUserStatus(id, status);
+        return ResponseEntity.ok(ApiResponse.success(null, "User status updated"));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable Long id) {
+        userService.deleteUser(id);
+        return ResponseEntity.ok(ApiResponse.success(null, "User deleted successfully"));
     }
 }
