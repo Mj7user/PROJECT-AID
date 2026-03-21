@@ -1,28 +1,21 @@
-package com.civicaid.dto.request;
+package com.civicaid.repository;
 
 import com.civicaid.entity.User;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
-import lombok.Data;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.stereotype.Repository;
 
-@Data
-public class UserRequest {
-    @NotBlank
-    private String name;
+import java.util.List;
+import java.util.Optional;
 
-    @NotBlank @Email
-    private String email;
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByEmail(String email);
+    boolean existsByEmail(String email);
+    List<User> findByRole(User.Role role);
+    Page<User> findByRole(User.Role role, Pageable pageable);
+    List<User> findByStatus(User.UserStatus status);
 
-    /** Required only when creating a new user (POST). Ignored on updates (PUT). */
-    @Size(min = 8, message = "Password must be at least 8 characters")
-    private String password;
-
-    private String phone;
-
-    @NotNull
-    private User.Role role;
-
-    private User.UserStatus status;
+    @Query("SELECT u FROM User u WHERE u.role = :role AND u.status = 'ACTIVE'")
+    List<User> findActiveUsersByRole(User.Role role);
 }
