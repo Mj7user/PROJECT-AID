@@ -1,14 +1,15 @@
 package com.civicaid.service.impl;
 
-import com.civicaid.dto.request.WelfareApplicationRequest;
-import com.civicaid.dto.response.WelfareApplicationResponse;
+import com.civicaid.dto.request.DisbursementRequest;
+import com.civicaid.dto.response.DisbursementResponse;
 import com.civicaid.entity.*;
 import com.civicaid.exception.BusinessException;
 import com.civicaid.exception.ResourceNotFoundException;
-import com.civicaid.repository.*;
+import com.civicaid.repository.DisbursementRepository;
+import com.civicaid.repository.WelfareApplicationRepository;
 import com.civicaid.service.AuditLogService;
+import com.civicaid.service.DisbursementService;
 import com.civicaid.service.NotificationService;
-import com.civicaid.service.WelfareApplicationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,157 +17,113 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
-public class WelfareApplicationServiceImpl implements WelfareApplicationService {
+public class DisbursementServiceImpl implements DisbursementService {
 
+    private final DisbursementRepository disbursementRepository;
     private final WelfareApplicationRepository applicationRepository;
-    private final CitizenRepository citizenRepository;
-    private final ProgramRepository programRepository;
-    private final SchemeRepository schemeRepository;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
     private final com.civicaid.repository.UserRepository userRepository;
 
     private Long currentUserId() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByEmail(email).map(User::getUserId).orElse(null);
+        return userRepository.findByEmail(email).map(com.civicaid.entity.User::getUserId).orElse(null);
     }
 
     @Override
     @Transactional
-    public WelfareApplicationResponse submitApplication(Long citizenId, WelfareApplicationRequest request) {
-        Citizen citizen = citizenRepository.findById(citizenId)
-                .orElseThrow(() -> new ResourceNotFoundException("Citizen", citizenId));
+    public DisbursementResponse createDisbursement(DisbursementRequest request) {
+        WelfareApplication application = applicationRepository.findById(request.getApplicationId())
+                .orElseThrow(() -> new ResourceNotFoundException("Application", request.getApplicationId()));
 
-        if (citizen.getStatus() != Citizen.CitizenStatus.VERIFIED) {
-            throw new BusinessException("Citizen profile must be verified before applying for welfare programs");
+        if (application.getStatus() != WelfareApplication.ApplicationStatus.APPROVED) {
+            throw new BusinessException("Disbursement can only be created for APPROVED applications");
         }
 
-        if (applicationRepository.existsByCitizen_CitizenIdAndProgram_ProgramId(citizenId, request.getProgramId())) {
-            throw new BusinessException("Application already submitted for this program");
-        }
-
-        Program program = programRepository.findById(request.getProgramId())
-                .orElseThrow(() -> new ResourceNotFoundException("Program", request.getProgramId()));
-
-        if (program.getStatus() != Program.ProgramStatus.ACTIVE) {
-            throw new BusinessException("Program is not currently accepting applications");
-        }
-
-        Scheme scheme = null;
-        if (request.getSchemeId() != null) {
-            scheme = schemeRepository.findById(request.getSchemeId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Scheme", request.getSchemeId()));
-        }
-
-        WelfareApplication application = WelfareApplication.builder()
-                .citizen(citizen)
-                .program(program)
-                .scheme(scheme)
+        Disbursement disbursement = Disbursement.builder()
+                .application(application)
+                .amount(request.getAmount())
                 .remarks(request.getRemarks())
-                .status(WelfareApplication.ApplicationStatus.SUBMITTED)
+                .status(Disbursement.DisbursementStatus.PENDING)
                 .build();
 
-        application = applicationRepository.save(application);
+        disbursement = disbursementRepository.save(disbursement);
 
-        auditLogService.log(citizen.getUser().getUserId(), "SUBMIT_APPLICATION", "WELFARE_APPLICATION",
-                "Application ID: " + application.getApplicationId() + " submitted for program: " + program.getTitle(), null);
+        application.setStatus(WelfareApplication.ApplicationStatus.DISBURSED);
+        applicationRepository.save(application);
 
-        // Notify citizen
-        notificationService.sendNotification(
-                citizen.getUser().getUserId(),
-                application.getApplicationId(),
-                "Your application for " + program.getTitle() + " has been submitted successfully.",
-                Notification.NotificationCategory.APPLICATION
-        );
+        auditLogService.log(currentUserId(), "CREATE_DISBURSEMENT", "DISBURSEMENT",
+                "Disbursement ID: " + disbursement.getDisbursementId() + " of ₹" + request.getAmount()
+                + " created for application ID: " + request.getApplicationId(), null);
 
-        return mapToResponse(application);
-    }
-
-    @Override
-    public WelfareApplicationResponse getApplicationById(Long id) {
-        return mapToResponse(applicationRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Application", id)));
-    }
-
-    @Override
-    public Page<WelfareApplicationResponse> getApplicationsByCitizen(Long citizenId, Pageable pageable) {
-        return applicationRepository.findByCitizen_CitizenId(citizenId, pageable).map(this::mapToResponse);
-    }
-
-    @Override
-    public Page<WelfareApplicationResponse> getApplicationsByProgram(Long programId, Pageable pageable) {
-        return applicationRepository.findByProgram_ProgramId(programId, pageable).map(this::mapToResponse);
-    }
-
-    @Override
-    public Page<WelfareApplicationResponse> getApplicationsByStatus(WelfareApplication.ApplicationStatus status, Pageable pageable) {
-        return applicationRepository.findByStatus(status, pageable).map(this::mapToResponse);
-    }
-
-    @Override
-    public Page<WelfareApplicationResponse> getAllApplications(Pageable pageable) {
-        return applicationRepository.findAll(pageable).map(this::mapToResponse);
-    }
-
-    @Override
-    @Transactional
-    public WelfareApplicationResponse updateApplicationStatus(Long id, WelfareApplication.ApplicationStatus status, String remarks) {
-        WelfareApplication application = applicationRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Application", id));
-        application.setStatus(status);
-        if (remarks != null) application.setRemarks(remarks);
-        application = applicationRepository.save(application);
-
-        auditLogService.log(currentUserId(), "UPDATE_APPLICATION_STATUS", "WELFARE_APPLICATION",
-                "Application ID: " + id + " status changed to: " + status.name(), null);
-
-        // Notify citizen of status change
         notificationService.sendNotification(
                 application.getCitizen().getUser().getUserId(),
-                application.getApplicationId(),
-                "Your application status has been updated to: " + status.name(),
-                Notification.NotificationCategory.APPLICATION
+                disbursement.getDisbursementId(),
+                "A disbursement of ₹" + request.getAmount() + " has been initiated for your application.",
+                Notification.NotificationCategory.DISBURSEMENT
         );
 
-        return mapToResponse(application);
+        return mapToResponse(disbursement);
+    }
+
+    @Override
+    public DisbursementResponse getDisbursementById(Long id) {
+        return mapToResponse(disbursementRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Disbursement", id)));
+    }
+
+    @Override
+    public List<DisbursementResponse> getDisbursementsByApplication(Long applicationId) {
+        return disbursementRepository.findByApplication_ApplicationId(applicationId)
+                .stream().map(this::mapToResponse).toList();
+    }
+
+    @Override
+    public Page<DisbursementResponse> getDisbursementsByStatus(Disbursement.DisbursementStatus status, Pageable pageable) {
+        return disbursementRepository.findByStatus(status, pageable).map(this::mapToResponse);
+    }
+
+    @Override
+    public Page<DisbursementResponse> getAllDisbursements(Pageable pageable) {
+        return disbursementRepository.findAll(pageable).map(this::mapToResponse);
     }
 
     @Override
     @Transactional
-    public void withdrawApplication(Long id, Long citizenId) {
-        WelfareApplication application = applicationRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Application", id));
+    public DisbursementResponse updateDisbursementStatus(Long id, Disbursement.DisbursementStatus status) {
+        Disbursement disbursement = disbursementRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Disbursement", id));
+        disbursement.setStatus(status);
+        disbursement = disbursementRepository.save(disbursement);
 
-        if (!application.getCitizen().getCitizenId().equals(citizenId)) {
-            throw new BusinessException("You are not authorized to withdraw this application");
-        }
+        auditLogService.log(currentUserId(), "UPDATE_DISBURSEMENT_STATUS", "DISBURSEMENT",
+                "Disbursement ID: " + id + " status changed to: " + status.name(), null);
 
-        if (application.getStatus() == WelfareApplication.ApplicationStatus.DISBURSED
-                || application.getStatus() == WelfareApplication.ApplicationStatus.CLOSED) {
-            throw new BusinessException("Cannot withdraw application in current status: " + application.getStatus());
-        }
+        notificationService.sendNotification(
+                disbursement.getApplication().getCitizen().getUser().getUserId(),
+                disbursement.getDisbursementId(),
+                "Your disbursement status has been updated to: " + status.name(),
+                Notification.NotificationCategory.DISBURSEMENT
+        );
 
-        application.setStatus(WelfareApplication.ApplicationStatus.CLOSED);
-        applicationRepository.save(application);
-        auditLogService.log(currentUserId(), "WITHDRAW_APPLICATION", "WELFARE_APPLICATION",
-                "Application ID: " + id + " withdrawn by citizen ID: " + citizenId, null);
+        return mapToResponse(disbursement);
     }
 
-    private WelfareApplicationResponse mapToResponse(WelfareApplication a) {
-        return WelfareApplicationResponse.builder()
-                .applicationId(a.getApplicationId())
-                .citizenId(a.getCitizen().getCitizenId())
-                .citizenName(a.getCitizen().getName())
-                .programId(a.getProgram().getProgramId())
-                .programTitle(a.getProgram().getTitle())
-                .schemeId(a.getScheme() != null ? a.getScheme().getSchemeId() : null)
-                .schemeTitle(a.getScheme() != null ? a.getScheme().getTitle() : null)
-                .submittedDate(a.getSubmittedDate())
-                .status(a.getStatus())
-                .remarks(a.getRemarks())
-                .updatedAt(a.getUpdatedAt())
+    private DisbursementResponse mapToResponse(Disbursement d) {
+        return DisbursementResponse.builder()
+                .disbursementId(d.getDisbursementId())
+                .applicationId(d.getApplication().getApplicationId())
+                .citizenName(d.getApplication().getCitizen().getName())
+                .programTitle(d.getApplication().getProgram().getTitle())
+                .amount(d.getAmount())
+                .date(d.getDate())
+                .status(d.getStatus())
+                .remarks(d.getRemarks())
+                .updatedAt(d.getUpdatedAt())
                 .build();
     }
 }
