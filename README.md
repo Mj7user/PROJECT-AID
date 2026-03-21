@@ -1,156 +1,115 @@
 package com.civicaid.service.impl;
 
-import com.civicaid.dto.request.AuthRequest;
-import com.civicaid.dto.response.AuthResponse;
+import com.civicaid.dto.request.UserRequest;
 import com.civicaid.dto.response.UserResponse;
 import com.civicaid.entity.User;
 import com.civicaid.exception.BusinessException;
 import com.civicaid.exception.DuplicateResourceException;
 import com.civicaid.exception.ResourceNotFoundException;
 import com.civicaid.repository.UserRepository;
-import com.civicaid.security.jwt.JwtTokenProvider;
 import com.civicaid.service.AuditLogService;
-import com.civicaid.service.AuthService;
+import com.civicaid.service.UserService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
-public class AuthServiceImpl implements AuthService {
+public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final AuthenticationManager authenticationManager;
     private final AuditLogService auditLogService;
 
-    @Override
-    @Transactional
-    public AuthResponse login(AuthRequest.Login request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
-
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        String accessToken = jwtTokenProvider.generateAccessToken(request.getEmail());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(request.getEmail());
-
-        log.info("User logged in: {}", request.getEmail());
-        auditLogService.log(user.getUserId(), "LOGIN", "AUTH",
-                "User logged in successfully", null);
-
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtTokenProvider.getExpirationMs())
-                .user(mapToUserResponse(user))
-                .build();
+    /** Resolves the currently authenticated user's ID from the SecurityContext. */
+    private Long currentUserId() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByEmail(email).map(User::getUserId).orElse(null);
     }
 
     @Override
     @Transactional
-    public AuthResponse register(AuthRequest.Register request) {
+    public UserResponse createUser(UserRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new DuplicateResourceException("Email already registered: " + request.getEmail());
         }
-
-        // Self-registration is restricted to CITIZEN only.
-        // All privileged roles (WELFARE_OFFICER, PROGRAM_MANAGER, etc.) must be
-        // created by an ADMINISTRATOR via POST /users.
-        User.Role role;
-        try {
-            role = User.Role.valueOf(request.getRole().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException("Invalid role: " + request.getRole());
+        if (request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new BusinessException("Password is required when creating a new user.");
         }
-        if (role != User.Role.CITIZEN) {
-            throw new BusinessException(
-                "Self-registration is only allowed for the CITIZEN role. " +
-                "Privileged accounts must be created by an Administrator.");
-        }
-
         User user = User.builder()
                 .name(request.getName())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .phone(request.getPhone())
-                .role(role)
-                .status(User.UserStatus.ACTIVE)
+                .role(request.getRole())
+                .status(request.getStatus() != null ? request.getStatus() : User.UserStatus.ACTIVE)
                 .build();
-
-        user = userRepository.save(user);
-        log.info("New user registered: {}", request.getEmail());
-        auditLogService.log(user.getUserId(), "REGISTER", "AUTH",
-                "New account registered with role: " + role.name(), null);
-
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getEmail());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getEmail());
-
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtTokenProvider.getExpirationMs())
-                .user(mapToUserResponse(user))
-                .build();
+        User saved = userRepository.save(user);
+        auditLogService.log(currentUserId(), "CREATE_USER", "USER",
+                "Created user: " + saved.getEmail() + " with role: " + saved.getRole().name(), null);
+        return mapToResponse(saved);
     }
 
     @Override
-    public AuthResponse refreshToken(AuthRequest.RefreshToken request) {
-        String token = request.getRefreshToken();
-        if (!jwtTokenProvider.validateToken(token)) {
-            throw new BusinessException("Invalid or expired refresh token");
-        }
-        String email = jwtTokenProvider.extractUsername(token);
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    public Page<UserResponse> getAllUsers(Pageable pageable) {
+        return userRepository.findAll(pageable).map(this::mapToResponse);
+    }
 
-        String newAccessToken = jwtTokenProvider.generateAccessToken(email);
-        String newRefreshToken = jwtTokenProvider.generateRefreshToken(email);
+    @Override
+    public UserResponse getUserById(Long id) {
+        return mapToResponse(userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", id)));
+    }
 
-        return AuthResponse.builder()
-                .accessToken(newAccessToken)
-                .refreshToken(newRefreshToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtTokenProvider.getExpirationMs())
-                .user(mapToUserResponse(user))
-                .build();
+    @Override
+    public UserResponse getUserByEmail(String email) {
+        return mapToResponse(userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email)));
     }
 
     @Override
     @Transactional
-    public void changePassword(Long userId, AuthRequest.ChangePassword request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
-
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new BusinessException("Current password is incorrect");
-        }
-
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
-        userRepository.save(user);
-        log.info("Password changed for user: {}", user.getEmail());
-        auditLogService.log(userId, "CHANGE_PASSWORD", "AUTH",
-                "Password changed successfully", null);
+    public UserResponse updateUser(Long id, UserRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", id));
+        user.setName(request.getName());
+        user.setPhone(request.getPhone());
+        if (request.getRole() != null) user.setRole(request.getRole());
+        if (request.getStatus() != null) user.setStatus(request.getStatus());
+        User saved = userRepository.save(user);
+        auditLogService.log(currentUserId(), "UPDATE_USER", "USER",
+                "Updated user ID: " + id, null);
+        return mapToResponse(saved);
     }
 
     @Override
-    public void logout(String token) {
-        // Stateless JWT — client discards token; add token blacklist here if needed
-        log.info("User logged out");
+    @Transactional
+    public void updateUserStatus(Long id, User.UserStatus status) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", id));
+        user.setStatus(status);
+        userRepository.save(user);
     }
 
-    private UserResponse mapToUserResponse(User user) {
+    @Override
+    @Transactional
+    public void deleteUser(Long id) {
+        if (!userRepository.existsById(id)) throw new ResourceNotFoundException("User", id);
+        auditLogService.log(currentUserId(), "DELETE_USER", "USER",
+                "Deleted user ID: " + id, null);
+        userRepository.deleteById(id);
+    }
+
+    @Override
+    public Page<UserResponse> getUsersByRole(User.Role role, Pageable pageable) {
+        return userRepository.findByRole(role, pageable).map(this::mapToResponse);
+    }
+
+    private UserResponse mapToResponse(User user) {
         return UserResponse.builder()
                 .userId(user.getUserId())
                 .name(user.getName())
