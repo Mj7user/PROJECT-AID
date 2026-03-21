@@ -1,69 +1,52 @@
-package com.civicaid.service.impl;
+package com.civicaid.controller;
 
+import com.civicaid.dto.response.ApiResponse;
 import com.civicaid.entity.AuditLog;
-import com.civicaid.entity.User;
-import com.civicaid.exception.ResourceNotFoundException;
-import com.civicaid.repository.AuditLogRepository;
-import com.civicaid.repository.UserRepository;
 import com.civicaid.service.AuditLogService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Service
+@RestController
+@RequestMapping("/audit-logs")
 @RequiredArgsConstructor
-@Slf4j
-public class AuditLogServiceImpl implements AuditLogService {
+@PreAuthorize("hasRole('ADMINISTRATOR')")
+public class AuditLogController {
 
-    private final AuditLogRepository auditLogRepository;
-    private final UserRepository userRepository;
+    private final AuditLogService auditLogService;
 
-    @Override
-    @Async
-    @Transactional
-    public void log(Long userId, String action, String resource, String details, String ipAddress) {
-        try {
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User", userId));
-
-            AuditLog auditLog = AuditLog.builder()
-                    .user(user)
-                    .action(action)
-                    .resource(resource)
-                    .details(details)
-                    .ipAddress(ipAddress)
-                    .build();
-
-            auditLogRepository.save(auditLog);
-        } catch (Exception e) {
-            log.error("Failed to write audit log for user {}: {}", userId, e.getMessage());
-        }
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<AuditLog>>> getAllAuditLogs(
+            @PageableDefault(size = 50, sort = "timestamp") Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(auditLogService.getAllLogs(pageable)));
     }
 
-    @Override
-    public Page<AuditLog> getAllLogs(Pageable pageable) {
-        return auditLogRepository.findAll(pageable);
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<ApiResponse<Page<AuditLog>>> getAuditLogsByUser(
+            @PathVariable Long userId,
+            @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(auditLogService.getLogsByUser(userId, pageable)));
     }
 
-    @Override
-    public Page<AuditLog> getLogsByUser(Long userId, Pageable pageable) {
-        return auditLogRepository.findByUser_UserId(userId, pageable);
+    @GetMapping("/resource/{resource}")
+    public ResponseEntity<ApiResponse<Page<AuditLog>>> getAuditLogsByResource(
+            @PathVariable String resource,
+            @PageableDefault(size = 50) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(auditLogService.getLogsByResource(resource, pageable)));
     }
 
-    @Override
-    public Page<AuditLog> getLogsByResource(String resource, Pageable pageable) {
-        return auditLogRepository.findByResource(resource, pageable);
-    }
-
-    @Override
-    public List<AuditLog> getLogsByDateRange(LocalDateTime from, LocalDateTime to) {
-        return auditLogRepository.findByTimestampBetween(from, to);
+    @GetMapping("/range")
+    public ResponseEntity<ApiResponse<List<AuditLog>>> getAuditLogsByDateRange(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
+        return ResponseEntity.ok(ApiResponse.success(auditLogService.getLogsByDateRange(from, to)));
     }
 }
