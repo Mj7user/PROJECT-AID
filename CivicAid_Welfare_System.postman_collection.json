@@ -1,0 +1,1090 @@
+{
+  "info": {
+    "name": "CivicAid Welfare System",
+    "_postman_id": "civicaid-welfare-system-v1",
+    "description": "Complete Postman collection for CivicAid Welfare System Backend API.\n\nBase URL: http://localhost:8082/api\n\n**Setup:**\n1. Run 'Login' request under Auth\n2. Copy the `token` from the response\n3. Set the collection variable `authToken` to that value\n   (or use the auto-capture pre-request script already included)\n\n**Roles available:**\n- CITIZEN\n- WELFARE_OFFICER\n- PROGRAM_MANAGER\n- ADMINISTRATOR\n- COMPLIANCE_OFFICER\n- GOVERNMENT_AUDITOR",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8082/api", "type": "string" },
+    { "key": "authToken", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "01 - Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "  pm.collectionVariables.set('authToken', json.data.token);",
+                  "  console.log('Token saved:', json.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@civicaid.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Register",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\",\n  \"phone\": \"9876543210\",\n  \"role\": \"CITIZEN\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Users (ADMINISTRATOR)",
+      "item": [
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Officer\",\n  \"email\": \"jane.officer@civicaid.com\",\n  \"password\": \"password123\",\n  \"phone\": \"9876543211\",\n  \"role\": \"WELFARE_OFFICER\",\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users?page=0&size=20&sort=userId,asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "userId,asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/1", "host": ["{{baseUrl}}"], "path": ["users", "1"] }
+          }
+        },
+        {
+          "name": "Get User By Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/email/admin@civicaid.com", "host": ["{{baseUrl}}"], "path": ["users", "email", "admin@civicaid.com"] }
+          }
+        },
+        {
+          "name": "Get Users By Role",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/role/CITIZEN?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "role", "CITIZEN"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Updated\",\n  \"email\": \"jane.officer@civicaid.com\",\n  \"phone\": \"9876543299\",\n  \"role\": \"WELFARE_OFFICER\",\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users/1", "host": ["{{baseUrl}}"], "path": ["users", "1"] }
+          }
+        },
+        {
+          "name": "Update User Status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/1/status?status=ACTIVE",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "1", "status"],
+              "query": [{ "key": "status", "value": "ACTIVE", "description": "ACTIVE | INACTIVE | SUSPENDED" }]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/users/1", "host": ["{{baseUrl}}"], "path": ["users", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Citizens",
+      "item": [
+        {
+          "name": "Register Citizen Profile (CITIZEN)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"dob\": \"1990-05-15\",\n  \"gender\": \"MALE\",\n  \"address\": \"123 Main Street, Springfield\",\n  \"contactInfo\": \"9876543210\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/citizens/register", "host": ["{{baseUrl}}"], "path": ["citizens", "register"] }
+          }
+        },
+        {
+          "name": "Get My Citizen Profile (CITIZEN)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/citizens/me", "host": ["{{baseUrl}}"], "path": ["citizens", "me"] }
+          }
+        },
+        {
+          "name": "Update My Citizen Profile (CITIZEN)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe Updated\",\n  \"dob\": \"1990-05-15\",\n  \"gender\": \"MALE\",\n  \"address\": \"456 Elm Street, Springfield\",\n  \"contactInfo\": \"9876540000\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/citizens/me", "host": ["{{baseUrl}}"], "path": ["citizens", "me"] }
+          }
+        },
+        {
+          "name": "Get All Citizens (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citizens?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["citizens"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "search", "value": "", "disabled": true, "description": "Optional search term" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search Citizens (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citizens?search=John&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["citizens"],
+              "query": [
+                { "key": "search", "value": "John" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Citizen By ID (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/citizens/1", "host": ["{{baseUrl}}"], "path": ["citizens", "1"] }
+          }
+        },
+        {
+          "name": "Update Citizen Status (Officer/Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citizens/1/status?status=VERIFIED",
+              "host": ["{{baseUrl}}"],
+              "path": ["citizens", "1", "status"],
+              "query": [{ "key": "status", "value": "VERIFIED", "description": "PENDING | VERIFIED | REJECTED | SUSPENDED" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Documents",
+      "item": [
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"citizenId\": 1,\n  \"docType\": \"ID_PROOF\",\n  \"fileUri\": \"https://storage.civicaid.com/documents/aadhar_1.pdf\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/documents", "host": ["{{baseUrl}}"], "path": ["documents"] }
+          }
+        },
+        {
+          "name": "Get Document By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/documents/1", "host": ["{{baseUrl}}"], "path": ["documents", "1"] }
+          }
+        },
+        {
+          "name": "Get Documents By Citizen",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/documents/citizen/1", "host": ["{{baseUrl}}"], "path": ["documents", "citizen", "1"] }
+          }
+        },
+        {
+          "name": "Verify Document (Officer/Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/documents/1/verify?status=VERIFIED&notes=Document+verified+successfully",
+              "host": ["{{baseUrl}}"],
+              "path": ["documents", "1", "verify"],
+              "query": [
+                { "key": "status", "value": "VERIFIED", "description": "PENDING | VERIFIED | REJECTED" },
+                { "key": "notes", "value": "Document verified successfully" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Document (Officer/Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/documents/1", "host": ["{{baseUrl}}"], "path": ["documents", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Programs",
+      "item": [
+        {
+          "name": "Create Program (Manager/Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Rural Housing Assistance Program\",\n  \"description\": \"Provides financial aid to rural citizens for housing construction and repair.\",\n  \"startDate\": \"2026-04-01\",\n  \"endDate\": \"2027-03-31\",\n  \"budget\": 5000000.00,\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/programs", "host": ["{{baseUrl}}"], "path": ["programs"] }
+          }
+        },
+        {
+          "name": "Get Program By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/programs/1", "host": ["{{baseUrl}}"], "path": ["programs", "1"] }
+          }
+        },
+        {
+          "name": "Get All Programs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/programs?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["programs"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "ACTIVE", "disabled": true, "description": "DRAFT | ACTIVE | PAUSED | COMPLETED | CANCELLED" },
+                { "key": "search", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Programs By Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/programs?status=ACTIVE&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["programs"],
+              "query": [
+                { "key": "status", "value": "ACTIVE" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Program (Manager/Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Rural Housing Assistance Program (Updated)\",\n  \"description\": \"Updated description for housing assistance.\",\n  \"startDate\": \"2026-04-01\",\n  \"endDate\": \"2027-06-30\",\n  \"budget\": 7500000.00,\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/programs/1", "host": ["{{baseUrl}}"], "path": ["programs", "1"] }
+          }
+        },
+        {
+          "name": "Update Program Status (Manager/Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/programs/1/status?status=PAUSED",
+              "host": ["{{baseUrl}}"],
+              "path": ["programs", "1", "status"],
+              "query": [{ "key": "status", "value": "PAUSED", "description": "DRAFT | ACTIVE | PAUSED | COMPLETED | CANCELLED" }]
+            }
+          }
+        },
+        {
+          "name": "Delete Program (ADMINISTRATOR)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/programs/1", "host": ["{{baseUrl}}"], "path": ["programs", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Schemes",
+      "item": [
+        {
+          "name": "Create Scheme (Manager/Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": 1,\n  \"title\": \"Home Repair Grant\",\n  \"description\": \"Grant up to INR 50,000 for home repair for BPL families.\",\n  \"eligibilityCriteria\": \"BPL card holder, age > 18, rural resident\",\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/schemes", "host": ["{{baseUrl}}"], "path": ["schemes"] }
+          }
+        },
+        {
+          "name": "Get Scheme By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/schemes/1", "host": ["{{baseUrl}}"], "path": ["schemes", "1"] }
+          }
+        },
+        {
+          "name": "Get All Schemes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/schemes?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["schemes"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Schemes By Program",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/schemes/program/1", "host": ["{{baseUrl}}"], "path": ["schemes", "program", "1"] }
+          }
+        },
+        {
+          "name": "Update Scheme (Manager/Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": 1,\n  \"title\": \"Home Repair Grant (Enhanced)\",\n  \"description\": \"Grant up to INR 75,000 for home repair for BPL families.\",\n  \"eligibilityCriteria\": \"BPL card holder, age > 18, rural resident\",\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/schemes/1", "host": ["{{baseUrl}}"], "path": ["schemes", "1"] }
+          }
+        },
+        {
+          "name": "Update Scheme Status (Manager/Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/schemes/1/status?status=INACTIVE",
+              "host": ["{{baseUrl}}"],
+              "path": ["schemes", "1", "status"],
+              "query": [{ "key": "status", "value": "INACTIVE", "description": "ACTIVE | INACTIVE | ARCHIVED" }]
+            }
+          }
+        },
+        {
+          "name": "Delete Scheme (ADMINISTRATOR)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/schemes/1", "host": ["{{baseUrl}}"], "path": ["schemes", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Welfare Applications",
+      "item": [
+        {
+          "name": "Submit Application (CITIZEN)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"programId\": 1,\n  \"schemeId\": 1,\n  \"remarks\": \"Applying for housing assistance due to flood damage.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/applications", "host": ["{{baseUrl}}"], "path": ["applications"] }
+          }
+        },
+        {
+          "name": "Get My Applications (CITIZEN)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/my?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "my"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Application By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/applications/1", "host": ["{{baseUrl}}"], "path": ["applications", "1"] }
+          }
+        },
+        {
+          "name": "Get All Applications (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "", "disabled": true, "description": "SUBMITTED | UNDER_REVIEW | APPROVED | REJECTED | WITHDRAWN" },
+                { "key": "programId", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Applications By Status (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications?status=SUBMITTED&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications"],
+              "query": [
+                { "key": "status", "value": "SUBMITTED" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Applications By Program (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications?programId=1&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications"],
+              "query": [
+                { "key": "programId", "value": "1" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Application Status (Officer/Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/1/status?status=APPROVED&remarks=All+documents+verified",
+              "host": ["{{baseUrl}}"],
+              "path": ["applications", "1", "status"],
+              "query": [
+                { "key": "status", "value": "APPROVED", "description": "SUBMITTED | UNDER_REVIEW | APPROVED | REJECTED | WITHDRAWN" },
+                { "key": "remarks", "value": "All documents verified" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Withdraw Application (CITIZEN)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/applications/1/withdraw", "host": ["{{baseUrl}}"], "path": ["applications", "1", "withdraw"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Eligibility Checks",
+      "item": [
+        {
+          "name": "Perform Eligibility Check (Officer/Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": 1,\n  \"result\": \"ELIGIBLE\",\n  \"notes\": \"All eligibility criteria met. Income below threshold.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/eligibility-checks", "host": ["{{baseUrl}}"], "path": ["eligibility-checks"] }
+          }
+        },
+        {
+          "name": "Get Checks By Application (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/eligibility-checks/application/1", "host": ["{{baseUrl}}"], "path": ["eligibility-checks", "application", "1"] }
+          }
+        },
+        {
+          "name": "Get Latest Check By Application",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/eligibility-checks/application/1/latest", "host": ["{{baseUrl}}"], "path": ["eligibility-checks", "application", "1", "latest"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Disbursements",
+      "item": [
+        {
+          "name": "Create Disbursement (Officer/Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": 1,\n  \"amount\": 50000.00,\n  \"remarks\": \"First installment for approved housing application.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/disbursements", "host": ["{{baseUrl}}"], "path": ["disbursements"] }
+          }
+        },
+        {
+          "name": "Get Disbursement By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/disbursements/1", "host": ["{{baseUrl}}"], "path": ["disbursements", "1"] }
+          }
+        },
+        {
+          "name": "Get All Disbursements (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/disbursements?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["disbursements"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "", "disabled": true, "description": "PENDING | PROCESSING | COMPLETED | FAILED | CANCELLED" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Disbursements By Application",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/disbursements/application/1", "host": ["{{baseUrl}}"], "path": ["disbursements", "application", "1"] }
+          }
+        },
+        {
+          "name": "Update Disbursement Status (Officer/Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/disbursements/1/status?status=PROCESSING",
+              "host": ["{{baseUrl}}"],
+              "path": ["disbursements", "1", "status"],
+              "query": [{ "key": "status", "value": "PROCESSING", "description": "PENDING | PROCESSING | COMPLETED | FAILED | CANCELLED" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Payments",
+      "item": [
+        {
+          "name": "Initiate Payment (Officer/Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"disbursementId\": 1,\n  \"method\": \"BANK_TRANSFER\",\n  \"amount\": 50000.00,\n  \"bankAccountNumber\": \"1234567890123456\",\n  \"walletId\": null,\n  \"transactionReference\": \"TXN20260325001\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/payments", "host": ["{{baseUrl}}"], "path": ["payments"] }
+          }
+        },
+        {
+          "name": "Get Payment By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/payments/1", "host": ["{{baseUrl}}"], "path": ["payments", "1"] }
+          }
+        },
+        {
+          "name": "Get All Payments (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Payments By Disbursement",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/payments/disbursement/1", "host": ["{{baseUrl}}"], "path": ["payments", "disbursement", "1"] }
+          }
+        },
+        {
+          "name": "Update Payment Status (Officer/Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/1/status?status=SUCCESS",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "1", "status"],
+              "query": [{ "key": "status", "value": "SUCCESS", "description": "INITIATED | PROCESSING | SUCCESS | FAILED | REVERSED" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - Compliance",
+      "item": [
+        {
+          "name": "Create Compliance Record (Officer/Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entityId\": 1,\n  \"type\": \"APPLICATION\",\n  \"result\": \"COMPLIANT\",\n  \"notes\": \"Application meets all compliance requirements.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/compliance", "host": ["{{baseUrl}}"], "path": ["compliance"] }
+          }
+        },
+        {
+          "name": "Get Compliance Record By ID (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/compliance/1", "host": ["{{baseUrl}}"], "path": ["compliance", "1"] }
+          }
+        },
+        {
+          "name": "Get All Compliance Records (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/compliance?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["compliance"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "result", "value": "", "disabled": true, "description": "COMPLIANT | NON_COMPLIANT | UNDER_REVIEW | PENDING" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Records By Entity (Officer+)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/compliance/entity/1?type=APPLICATION",
+              "host": ["{{baseUrl}}"],
+              "path": ["compliance", "entity", "1"],
+              "query": [{ "key": "type", "value": "APPLICATION", "description": "APPLICATION | PROGRAM | CITIZEN | DISBURSEMENT" }]
+            }
+          }
+        },
+        {
+          "name": "Update Compliance Record (Officer/Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entityId\": 1,\n  \"type\": \"APPLICATION\",\n  \"result\": \"NON_COMPLIANT\",\n  \"notes\": \"Missing income proof document after re-review.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/compliance/1", "host": ["{{baseUrl}}"], "path": ["compliance", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 - Audits",
+      "item": [
+        {
+          "name": "Create Audit (Officer/Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"Q1 2026 Disbursement Audit\",\n  \"findings\": \"3 out of 50 disbursements flagged for review.\",\n  \"status\": \"IN_PROGRESS\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/audits", "host": ["{{baseUrl}}"], "path": ["audits"] }
+          }
+        },
+        {
+          "name": "Get Audit By ID (Officer/Auditor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/audits/1", "host": ["{{baseUrl}}"], "path": ["audits", "1"] }
+          }
+        },
+        {
+          "name": "Get All Audits (Officer/Auditor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audits?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "", "disabled": true, "description": "SCHEDULED | IN_PROGRESS | COMPLETED | PENDING_REVIEW | CLOSED" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Audits (Officer/Admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audits/my?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["audits", "my"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Audit (Officer/Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"Q1 2026 Disbursement Audit (Final)\",\n  \"findings\": \"All 3 flagged disbursements resolved. Audit complete.\",\n  \"status\": \"COMPLETED\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/audits/1", "host": ["{{baseUrl}}"], "path": ["audits", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 - Audit Logs (ADMINISTRATOR)",
+      "item": [
+        {
+          "name": "Get All Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs?page=0&size=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Audit Logs By User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs/user/1?page=0&size=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs", "user", "1"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Audit Logs By Resource",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs/resource/APPLICATION?page=0&size=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs", "resource", "APPLICATION"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Audit Logs By Date Range",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs/range?from=2026-01-01T00:00:00&to=2026-03-31T23:59:59",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs", "range"],
+              "query": [
+                { "key": "from", "value": "2026-01-01T00:00:00", "description": "ISO 8601 datetime" },
+                { "key": "to", "value": "2026-03-31T23:59:59", "description": "ISO 8601 datetime" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 - Notifications",
+      "item": [
+        {
+          "name": "Get My Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Unread Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/unread?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "unread"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Unread Notification Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/notifications/unread/count", "host": ["{{baseUrl}}"], "path": ["notifications", "unread", "count"] }
+          }
+        },
+        {
+          "name": "Mark Notification As Read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/notifications/1/read", "host": ["{{baseUrl}}"], "path": ["notifications", "1", "read"] }
+          }
+        },
+        {
+          "name": "Mark All Notifications As Read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/notifications/read-all", "host": ["{{baseUrl}}"], "path": ["notifications", "read-all"] }
+          }
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/notifications/1", "host": ["{{baseUrl}}"], "path": ["notifications", "1"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 - Reports",
+      "item": [
+        {
+          "name": "Dashboard Statistics (Manager/Admin/Auditor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/reports/dashboard", "host": ["{{baseUrl}}"], "path": ["reports", "dashboard"] }
+          }
+        },
+        {
+          "name": "Application Statistics (Officer/Manager/Admin/Auditor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/reports/applications", "host": ["{{baseUrl}}"], "path": ["reports", "applications"] }
+          }
+        },
+        {
+          "name": "Disbursement Statistics (Manager/Admin/Auditor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/reports/disbursements", "host": ["{{baseUrl}}"], "path": ["reports", "disbursements"] }
+          }
+        },
+        {
+          "name": "Compliance Statistics (Officer/Admin/Auditor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/reports/compliance", "host": ["{{baseUrl}}"], "path": ["reports", "compliance"] }
+          }
+        },
+        {
+          "name": "Program Statistics By ID (Manager/Admin/Auditor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/reports/programs/1", "host": ["{{baseUrl}}"], "path": ["reports", "programs", "1"] }
+          }
+        }
+      ]
+    }
+  ]
+}
